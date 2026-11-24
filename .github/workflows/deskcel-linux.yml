@@ -383,6 +383,8 @@ jobs:
           TAG="deskcel-${VERSION}"
           gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "Deskcel ${VERSION}" --notes "Deskcel ${VERSION} - suporte remoto Hostcel (baseado no RustDesk, AGPL-3.0)."
+          # Cópias sem versão para links fixos na página (releases/latest/download/Deskcel-x86_64.deb)
+          for f in Deskcel-${VERSION}-*; do cp "$f" "${f/-${VERSION}/}"; done
           sha256sum Deskcel-* > SHA256SUMS-linux.txt
           cat SHA256SUMS-linux.txt
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber Deskcel-* SHA256SUMS-linux.txt
