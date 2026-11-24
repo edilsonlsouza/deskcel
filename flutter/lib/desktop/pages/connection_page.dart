@@ -398,7 +398,7 @@ class _ConnectionPageState extends State<ConnectionPage>
             left: 36,
             top: 112,
             child: Text('Digite o ID do computador que você quer acessar.',
-                style: Dk.desc)),
+                style: Dk.lead)),
         Positioned(
             left: 36,
             top: 152,
@@ -643,7 +643,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                                   filled: true,
                                   fillColor: Dk.branco,
                                   counterText: '',
-                                  hintText: '123 456 789',
+                                  hintText: _idInputFocused.value
+                                      ? null
+                                      : '123 456 789',
                                   hintStyle:
                                       Dk.campo.copyWith(color: Dk.apoio),
                                   prefixIcon: const Padding(

@@ -352,8 +352,9 @@ extension StringExtension on String {
   String get nonBreaking => replaceAll(' ', String.fromCharCode($nbsp));
 }
 
-const Size kConnectionManagerWindowSizeClosedChat = Size(320, 520); // Deskcel: modelo
-const Size kConnectionManagerWindowSizeOpenChat = Size(720, 520); // Deskcel: modelo
+// Deskcel: 320 x 520 úteis como no modelo + borda invisível do Windows (descontada em server_page.dart).
+const Size kConnectionManagerWindowSizeClosedChat = Size(336, 528);
+const Size kConnectionManagerWindowSizeOpenChat = Size(736, 528);
 // Tabbar transition duration, now we remove the duration
 const Duration kTabTransitionDuration = Duration.zero;
 const double kEmptyMarginTop = 50;

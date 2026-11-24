@@ -676,9 +676,9 @@ class _DesktopTabState extends State<DesktopTab>
                     Expanded(
                         child: Obx(() => Offstage(
                             // Deskcel: a principal não mostra abas; a do cliente só com mais de uma conexão.
-                            offstage: tabType == DesktopTabType.main ||
-                                (tabType == DesktopTabType.cm &&
-                                    controller.state.value.tabs.length < 2),
+                            offstage: (controller.state.value.tabs.length < 2 &&
+                                    tabType == DesktopTabType.cm) ||
+                                tabType == DesktopTabType.main,
                             child: Listener(
                             // handle mouse wheel
                             onPointerSignal: (e) {

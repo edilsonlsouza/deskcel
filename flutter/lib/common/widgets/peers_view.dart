@@ -194,6 +194,7 @@ class _PeersViewState extends State<_PeersView>
             return Align(
               alignment: Alignment.topCenter,
               child: DkCard(
+                width: double.infinity,
                 height: 208,
                 child: Column(children: [
                   const SizedBox(height: 48),

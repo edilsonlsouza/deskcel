@@ -230,7 +230,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   width: 252,
                   child: Text(
                       'Passe o ID e a senha abaixo para o técnico da Hostcel.',
-                      style: Dk.desc)),
+                      style: Dk.lead)),
               Positioned(
                 left: 24,
                 top: 168,
@@ -771,6 +771,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     }
 
+    if (!bind.isIncomingOnly() &&
+        !bind.isOutgoingOnly() &&
+        content == 'install_tip') {
+      // Deskcel: instalar fica como botão; a explicação aparece ao passar o mouse.
+      return Tooltip(
+        message: translate(content),
+        child: DkSecondaryButton(translate(btnText),
+            icon: 'baixar', width: 252, height: 40, onTap: onPressed),
+      ).marginOnly(bottom: 8);
+    }
     if (!bind.isIncomingOnly() && !bind.isOutgoingOnly()) {
       // Deskcel: aviso em cartão do modelo, com as mesmas ações.
       return DkCard(

@@ -2730,7 +2730,7 @@ class _AboutState extends State<_About> {
             children: [
               Text(translate('About'), style: Dk.tit),
               Text('Informações do programa e do suporte da Hostcel.',
-                      style: Dk.desc)
+                      style: Dk.lead)
                   .marginOnly(bottom: 16),
               DkCard(
                 width: 528,
@@ -2786,8 +2786,7 @@ class _AboutState extends State<_About> {
                                 : InkWell(
                                     onTap: linhas[i].$3,
                                     child: Text(linhas[i].$2,
-                                        style: Dk.t(14, FontWeight.w500, 20,
-                                            color: Dk.terracota))),
+                                        style: Dk.t(14, FontWeight.w500, 20))),
                           ),
                         ),
                       ]),

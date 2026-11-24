@@ -199,6 +199,17 @@ jobs:
             $g2 = [System.Drawing.Graphics]::FromImage($c); $g2.CopyFromScreen($r.L, $r.T, 0, 0, $c.Size)
             $c.Save("fotos\janela-principal.png")
           }
+          Start-Process .\rustdesk\rustdesk.exe -ArgumentList '--cm' | Out-Null
+          Start-Sleep 20
+          $cm = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like '*Connection*' } | Select-Object -First 1
+          if ($cm) {
+            [W]::SetForegroundWindow($cm.MainWindowHandle) | Out-Null; Start-Sleep 2
+            $r = New-Object W+R; [W]::GetWindowRect($cm.MainWindowHandle, [ref]$r) | Out-Null
+            "cliente: $($r.L),$($r.T) $($r.Ri - $r.L)x$($r.B - $r.T)" | Tee-Object -Append fotos\janela.txt
+            $c = New-Object System.Drawing.Bitmap ($r.Ri - $r.L), ($r.B - $r.T)
+            $g3 = [System.Drawing.Graphics]::FromImage($c); $g3.CopyFromScreen($r.L, $r.T, 0, 0, $c.Size)
+            $c.Save("fotos\janela-cliente.png")
+          }
 
       - name: Upload das fotos
         if: always()

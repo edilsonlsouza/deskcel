@@ -36,7 +36,8 @@ class Dk {
 
   static final marca = t(16, FontWeight.w600, 16, ls: -.03);
   static final marca2 = t(12, FontWeight.w400, 16, color: apoio);
-  static final tit = t(22, FontWeight.w600, 32, ls: -.03);
+  static final tit = t(28, FontWeight.w600, 32, ls: -.03);
+  static final lead = t(15, FontWeight.w400, 24, color: apoio);
   static final sub = t(16, FontWeight.w600, 24, ls: -.03);
   static final desc = t(13, FontWeight.w400, 20, color: apoio);
   static final rot = t(13, FontWeight.w500, 20);

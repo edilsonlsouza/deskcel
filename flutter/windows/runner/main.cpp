@@ -166,7 +166,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Point relative_origin(10, 10);
 
   Win32Window::Point origin(workarea_origin.x + relative_origin.x, workarea_origin.y + relative_origin.y);
-  Win32Window::Size size(900u, 600u); // Deskcel: tamanho do modelo
+  // Deskcel: 900 x 600 úteis como no modelo + borda invisível de redimensionar do Windows (8 px nos lados e embaixo).
+  Win32Window::Size size(916u, 608u);
 
   // Fit the window to the monitor's work area.
   Win32Desktop::FitToWorkArea(origin, size);
