@@ -4,6 +4,14 @@ name: Deskcel Windows portatil
 
 on:
   workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Publicar o Deskcel.exe na versão deskcel-<versão> do GitHub (de onde a VM baixa)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
 
 env:
   DESKCEL_SERVER: "desck.hostcel.com.br"
@@ -48,23 +56,7 @@ jobs:
       # hbb_common é submódulo do upstream: o nome, o servidor e a chave são trocados aqui.
       - name: Marca Deskcel (nome, servidor e chave)
         shell: bash
-        run: |
-          python3 - <<'EOF'
-          import os, re
-          p = "libs/hbb_common/src/config.rs"
-          s = open(p, encoding="utf-8").read()
-          subs = [
-              (r'APP_NAME: RwLock<String> = RwLock::new\("RustDesk"', f'APP_NAME: RwLock<String> = RwLock::new("{os.environ["DESKCEL_NAME"]}"'),
-              (r'RENDEZVOUS_SERVERS: &\[&str\] = &\["rs-ny\.rustdesk\.com"\]', f'RENDEZVOUS_SERVERS: &[&str] = &["{os.environ["DESKCEL_SERVER"]}"]'),
-              (r'RS_PUB_KEY: &str = "[^"]+"', f'RS_PUB_KEY: &str = "{os.environ["DESKCEL_KEY"]}"'),
-          ]
-          assert os.environ["DESKCEL_KEY"], "segredo DESKCEL_KEY vazio"
-          for pat, rep in subs:
-              s, n = re.subn(pat, rep, s)
-              assert n == 1, f"padrão não encontrado: {pat}"
-          open(p, "w", encoding="utf-8").write(s)
-          EOF
-          grep -n "APP_NAME: RwLock\|RENDEZVOUS_SERVERS:\|RS_PUB_KEY:" libs/hbb_common/src/config.rs
+        run: python3 .github/deskcel-marca.py
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -168,6 +160,19 @@ jobs:
           name: Deskcel-windows-x64
           path: ./out/Deskcel.exe
           if-no-files-found: error
+
+      - name: Publicar na versão deskcel-<versão>
+        if: ${{ inputs.publicar }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          TAG="deskcel-${VERSION}"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||             gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "Deskcel ${VERSION}" --notes "Deskcel ${VERSION} - suporte remoto Hostcel (baseado no RustDesk, AGPL-3.0)."
+          sha256sum Deskcel.exe > SHA256SUMS-windows.txt
+          cat SHA256SUMS-windows.txt
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber Deskcel.exe SHA256SUMS-windows.txt
 
       # Abre o programa no runner e fotografa a janela, para comparar com o modelo.
       - name: Foto da janela principal

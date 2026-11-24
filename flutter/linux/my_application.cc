@@ -142,19 +142,19 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "rustdesk");
+    gtk_header_bar_set_title(header_bar, "Deskcel");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "rustdesk");
+    gtk_window_set_title(window, "Deskcel");
   }
 
   // auto bdw = bitsdojo_window_from(window); // <--- add this line
   // bdw->setCustomFrame(true);               // <-- add this line
-  int width = 800, height = 600;
+  int width = 900, height = 600; // Deskcel: tamanhos do modelo
   if (gIsConnectionManager) {
-    width = 300;
-    height = 490;
+    width = 320;
+    height = 520;
   }
   gtk_window_set_default_size(window, width, height);   // <-- comment this line
   // gtk_widget_show(GTK_WIDGET(window));
