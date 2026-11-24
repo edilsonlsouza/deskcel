@@ -7,6 +7,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -22,10 +24,14 @@ import '../../models/platform_model.dart';
 import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 
 class OnlineStatusWidget extends StatefulWidget {
-  const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
+  const OnlineStatusWidget(
+      {Key? key, this.onSvcStatusChanged, this.dk = false})
       : super(key: key);
 
   final VoidCallback? onSvcStatusChanged;
+
+  /// Deskcel: rodapé de estado da coluna esquerda do modelo.
+  final bool dk;
 
   @override
   State<OnlineStatusWidget> createState() => _OnlineStatusWidgetState();
@@ -63,8 +69,74 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
     super.dispose();
   }
 
+  Widget _buildDk() {
+    return Obx(() {
+      final stopped = _svcStopped.value;
+      final status = stateGlobal.svcStatus.value;
+      final Color cor;
+      final String texto;
+      if (stopped) {
+        cor = Dk.terracota;
+        texto = translate("Service is not running");
+      } else if (status == SvcStatus.connecting) {
+        cor = Dk.laranja;
+        texto = 'Conectando…';
+      } else if (status == SvcStatus.ready) {
+        cor = Dk.ok;
+        texto = translate('Ready');
+      } else {
+        cor = Dk.terracota;
+        texto = translate("not_ready_status");
+      }
+      return Container(
+        decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Dk.linha, width: 1))),
+        child: Stack(children: [
+          Positioned(
+              left: 24,
+              top: 20,
+              child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration:
+                      BoxDecoration(color: cor, shape: BoxShape.circle))),
+          Positioned(
+            left: 40,
+            top: 14,
+            right: 24,
+            child: Row(children: [
+              Flexible(
+                  child: Text(texto,
+                      style: Dk.rot,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis)),
+              if (stopped)
+                InkWell(
+                  onTap: () async => await start_service(true),
+                  child: Text(translate("Start service"),
+                      style: Dk.t(13, FontWeight.w500, 20,
+                          color: Dk.terracota)),
+                ).marginOnly(left: 8),
+            ]),
+          ),
+          if (!stopped && status == SvcStatus.ready)
+            Positioned(
+              right: 24,
+              top: 16,
+              child: Row(children: [
+                const DkIcon('cadeado', size: 16, color: Dk.apoio),
+                const SizedBox(width: 4),
+                Text('Conexão criptografada', style: Dk.peq),
+              ]),
+            ),
+        ]),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.dk) return _buildDk();
     final isIncomingOnly = bind.isIncomingOnly();
     startServiceWidget() => Offstage(
           offstage: !_svcStopped.value,
@@ -301,9 +373,125 @@ class _ConnectionPageState extends State<ConnectionPage>
     }
   }
 
+  /// Coluna "Acessar outro computador" do modelo (x = 300, margens de 36 px).
+  Widget _buildDk(BuildContext context) {
+    return Container(
+      color: Dk.off,
+      child: Stack(children: [
+        Positioned(
+            right: 36,
+            top: 24,
+            child: Offstage(
+              offstage: bind.isDisableSettings(),
+              child: DkIconButton('config',
+                  size: 32,
+                  background: Dk.branco,
+                  border: true,
+                  tooltip: translate('Settings'),
+                  onTap: DesktopTabPage.onAddSetting),
+            )),
+        Positioned(
+            left: 36,
+            top: 80,
+            child: Text('Acessar outro computador', style: Dk.tit)),
+        Positioned(
+            left: 36,
+            top: 112,
+            child: Text('Digite o ID do computador que você quer acessar.',
+                style: Dk.desc)),
+        Positioned(
+            left: 36,
+            top: 152,
+            child: Text('ID do computador', style: Dk.rot)),
+        Positioned(
+            left: 36,
+            top: 176,
+            width: 392,
+            height: 48,
+            child: _buildRemoteIDTextField(context)),
+        Positioned(
+            left: 436,
+            top: 176,
+            child: DkPrimaryButton('Conectar',
+                icon: 'seta',
+                iconAfter: true,
+                width: 128,
+                onTap: () => onConnect())),
+        Positioned(
+            left: 36,
+            top: 240,
+            child: DkSecondaryButton('Transferir arquivos',
+                icon: 'pasta',
+                width: 192,
+                height: 40,
+                onTap: () => onConnect(isFileTransfer: true))),
+        // Demais modos de conexão (câmera, terminal, túnel TCP, pedir aprovação).
+        Positioned(
+            left: 236,
+            top: 240,
+            child: Builder(
+                builder: (ctx) => DkIconButton('mais',
+                    background: Dk.branco,
+                    border: true,
+                    tooltip: translate('More'),
+                    onTap: () => _showMoreMenu(ctx)))),
+        Positioned(
+            left: 36,
+            top: 304,
+            right: 36,
+            bottom: 24,
+            child: PeerTabPage()),
+      ]),
+    );
+  }
+
+  List<mod_menu.PopupMenuEntry<String>> _moreMenuEntries() {
+    return [
+      ('Transfer file', () => onConnect(isFileTransfer: true)),
+      ('View camera', () => onConnect(isViewCamera: true)),
+      ('${translate('Terminal')} (beta)', () => onConnect(isTerminal: true)),
+      if (isDesktop) ('TCP tunneling', () => onConnect(isTcpTunneling: true)),
+    ]
+        .map<MenuEntryBase<String>>((e) => MenuEntryButton<String>(
+              childBuilder: (TextStyle? style) =>
+                  Text(translate(e.$1), style: style),
+              proc: () => e.$2(),
+              padding: EdgeInsets.symmetric(horizontal: kDesktopMenuPadding.left),
+              dismissOnClicked: true,
+            ))
+        .followedBy([
+          MenuEntryDivider<String>(),
+          _requestApprovalMenu(context),
+        ])
+        .map((e) => e.build(
+            context,
+            const MenuConfig(
+                commonColor: CustomPopupMenuTheme.commonColor,
+                height: CustomPopupMenuTheme.height,
+                dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+        .expand((i) => i)
+        .toList();
+  }
+
+  void _showMoreMenu(BuildContext ctx) {
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final pos = box.localToGlobal(Offset(0, box.size.height + 4));
+    _menuOpen.value = true;
+    mod_menu
+        .showMenu(
+          context: context,
+          position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx, pos.dy),
+          items: _moreMenuEntries(),
+          elevation: 8,
+        )
+        .then((_) => _menuOpen.value = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
+    if (!isOutgoingOnly && !bind.isIncomingOnly()) return _buildDk(context);
     return Column(
       children: [
         Expanded(
@@ -376,20 +564,8 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// UI for the remote ID TextField.
   /// Search for a peer.
   Widget _buildRemoteIDTextField(BuildContext context) {
-    var w = Container(
-      width: 320 + 20 * 2,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
-      decoration: BoxDecoration(
-          borderRadius: const BorderRadius.all(Radius.circular(13)),
-          border: Border.all(color: Theme.of(context).colorScheme.background)),
-      child: Ink(
-        child: Column(
-          children: [
-            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
-            Row(
-              children: [
-                Expanded(
-                    child: RawAutocomplete<Peer>(
+    final dk = !bind.isOutgoingOnly() && !bind.isIncomingOnly();
+    final autocomplete = RawAutocomplete<Peer>(
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     if (textEditingValue.text == '') {
                       _autocompleteOpts = const Iterable<Peer>.empty();
@@ -452,22 +628,52 @@ class _ConnectionPageState extends State<ConnectionPage>
                           enableSuggestions: false,
                           keyboardType: TextInputType.visiblePassword,
                           focusNode: fieldFocusNode,
-                          style: const TextStyle(
-                            fontFamily: 'WorkSans',
-                            fontSize: 22,
-                            height: 1.4,
-                          ),
+                          style: dk
+                              ? Dk.campo
+                              : const TextStyle(
+                                  fontFamily: 'WorkSans',
+                                  fontSize: 22,
+                                  height: 1.4,
+                                ),
                           maxLines: 1,
                           cursorColor:
                               Theme.of(context).textTheme.titleLarge?.color,
-                          decoration: InputDecoration(
-                              filled: false,
-                              counterText: '',
-                              hintText: _idInputFocused.value
-                                  ? null
-                                  : translate('Enter Remote ID'),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 15, vertical: 13)),
+                          decoration: dk
+                              ? InputDecoration(
+                                  filled: true,
+                                  fillColor: Dk.branco,
+                                  counterText: '',
+                                  hintText: '123 456 789',
+                                  hintStyle:
+                                      Dk.campo.copyWith(color: Dk.apoio),
+                                  prefixIcon: const Padding(
+                                      padding:
+                                          EdgeInsets.only(left: 16, right: 12),
+                                      child: DkIcon('monitor',
+                                          color: Dk.apoio)),
+                                  prefixIconConstraints: const BoxConstraints(
+                                      minWidth: 48, minHeight: 20),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 14),
+                                  enabledBorder: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(Dk.rCampo),
+                                      borderSide:
+                                          const BorderSide(color: Dk.linha)),
+                                  focusedBorder: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(Dk.rCampo),
+                                      borderSide: const BorderSide(
+                                          color: Dk.laranja, width: 2)),
+                                )
+                              : InputDecoration(
+                                  filled: false,
+                                  counterText: '',
+                                  hintText: _idInputFocused.value
+                                      ? null
+                                      : translate('Enter Remote ID'),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 15, vertical: 13)),
                           controller: fieldTextEditingController,
                           inputFormatters: [IDTextInputFormatter()],
                           onChanged: (v) {
@@ -545,7 +751,22 @@ class _ConnectionPageState extends State<ConnectionPage>
                               ))),
                     );
                   },
-                )),
+                );
+    if (dk) return autocomplete;
+    var w = Container(
+      width: 320 + 20 * 2,
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
+      decoration: BoxDecoration(
+          borderRadius: const BorderRadius.all(Radius.circular(13)),
+          border: Border.all(color: Theme.of(context).colorScheme.background)),
+      child: Ink(
+        child: Column(
+          children: [
+            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
+            Row(
+              children: [
+                Expanded(
+                    child: autocomplete),
               ],
             ),
             Padding(

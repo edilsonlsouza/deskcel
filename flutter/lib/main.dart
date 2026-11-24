@@ -436,7 +436,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               Brightness.dark;
       final ThemeMode to;
       if (systemIsDark) {
-        to = ThemeMode.dark;
+        to = ThemeMode.light; // Deskcel: sem cor escura por padrão
       } else {
         to = ThemeMode.light;
       }

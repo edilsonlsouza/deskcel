@@ -9,6 +9,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/main.dart';
@@ -373,8 +374,9 @@ class MyTheme {
     // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
     useMaterial3: false,
     brightness: Brightness.light,
-    hoverColor: Color.fromARGB(255, 224, 224, 224),
-    scaffoldBackgroundColor: Colors.white,
+    fontFamily: Dk.fonte,
+    hoverColor: Dk.areia,
+    scaffoldBackgroundColor: Dk.off,
     dialogBackgroundColor: Colors.white,
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
@@ -382,33 +384,43 @@ class MyTheme {
     dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18.0),
+        borderRadius: BorderRadius.circular(Dk.rCartao),
         side: BorderSide(
           width: 1,
-          color: grayBg,
+          color: Dk.linha,
         ),
       ),
     ),
     scrollbarTheme: scrollbarTheme,
     inputDecorationTheme: isDesktop
         ? InputDecorationTheme(
-            fillColor: grayBg,
+            fillColor: Dk.branco,
             filled: true,
             isDense: true,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(Dk.rCampo),
+              borderSide: BorderSide(color: Dk.linha),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(Dk.rCampo),
+              borderSide: BorderSide(color: Dk.linha),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(Dk.rCampo),
+              borderSide: BorderSide(color: Dk.laranja, width: 2),
             ),
           )
         : null,
     textTheme: const TextTheme(
-        titleLarge: TextStyle(fontSize: 19, color: Colors.black87),
-        titleSmall: TextStyle(fontSize: 14, color: Colors.black87),
-        bodySmall: TextStyle(fontSize: 12, color: Colors.black87, height: 1.25),
-        bodyMedium:
-            TextStyle(fontSize: 14, color: Colors.black87, height: 1.25),
-        labelLarge: TextStyle(fontSize: 16.0, color: MyTheme.accent80)),
-    cardColor: grayBg,
-    hintColor: Color(0xFFAAAAAA),
+        titleLarge: TextStyle(
+            fontSize: 19, color: Dk.tinta, fontWeight: FontWeight.w600),
+        titleSmall: TextStyle(fontSize: 14, color: Dk.tinta),
+        bodySmall: TextStyle(fontSize: 12, color: Dk.tinta, height: 1.25),
+        bodyMedium: TextStyle(fontSize: 14, color: Dk.tinta, height: 1.25),
+        labelLarge: TextStyle(fontSize: 16.0, color: Dk.terracota)),
+    cardColor: Dk.branco,
+    dividerColor: Dk.linha,
+    hintColor: Dk.apoio,
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
@@ -429,38 +441,55 @@ class MyTheme {
         : mobileTextButtonTheme,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: MyTheme.accent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
+        backgroundColor: Dk.laranja,
+        foregroundColor: Dk.tinta,
+        elevation: 0,
+        textStyle: TextStyle(fontWeight: FontWeight.w600),
+        shape: StadiumBorder(),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        backgroundColor: grayBg,
-        foregroundColor: Colors.black87,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
+        backgroundColor: Dk.branco,
+        foregroundColor: Dk.tinta,
+        side: BorderSide(color: Dk.linha),
+        textStyle: TextStyle(fontWeight: FontWeight.w500),
+        shape: StadiumBorder(),
       ),
     ),
-    switchTheme: switchTheme(),
+    switchTheme: switchTheme().copyWith(
+      thumbColor: MaterialStateProperty.resolveWith((states) =>
+          states.contains(MaterialState.selected) ? Dk.branco : Dk.apoio),
+      trackColor: MaterialStateProperty.resolveWith((states) =>
+          states.contains(MaterialState.selected) ? Dk.laranja : Dk.branco),
+      trackOutlineColor: MaterialStateProperty.resolveWith((states) =>
+          states.contains(MaterialState.selected)
+              ? Colors.transparent
+              : Dk.apoio),
+    ),
     radioTheme: radioTheme(),
-    checkboxTheme: checkboxTheme,
+    checkboxTheme: checkboxTheme.copyWith(
+      fillColor: MaterialStateProperty.resolveWith((states) =>
+          states.contains(MaterialState.selected) ? Dk.laranja : null),
+      checkColor: MaterialStatePropertyAll(Dk.tinta),
+    ),
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
-        primary: Colors.blue, secondary: accent, background: grayBg),
+        primary: Dk.terracota,
+        secondary: Dk.laranja,
+        background: Dk.off,
+        surface: Dk.branco),
     popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         shape: RoundedRectangleBorder(
           side: BorderSide(
               color: (isDesktop || isWebDesktop)
-                  ? Color(0xFFECECEC)
+                  ? Dk.linha
                   : Colors.transparent),
-          borderRadius: BorderRadius.all(Radius.circular(8.0)),
+          borderRadius: BorderRadius.all(Radius.circular(16.0)),
         )),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
@@ -599,12 +628,8 @@ class MyTheme {
   static ThemeMode currentThemeMode() {
     final preference = getThemeModePreference();
     if (preference == ThemeMode.system) {
-      if (WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-          Brightness.light) {
-        return ThemeMode.light;
-      } else {
-        return ThemeMode.dark;
-      }
+      // Deskcel: sem cor escura por padrão; o escuro só vale se escolhido nas configurações.
+      return ThemeMode.light;
     } else {
       return preference;
     }

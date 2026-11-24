@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide TabBarTheme;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/pages/view_camera_page.dart';
 import 'package:flutter_hbb/main.dart';
@@ -321,6 +322,10 @@ class _DesktopTabState extends State<DesktopTab>
   Rx<DesktopTabState> get state => controller.state;
 
   DesktopTabType get tabType => controller.tabType;
+  // Deskcel: janela principal e janela do cliente usam a barra de título do modelo.
+  bool get _dkBar =>
+      tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
+
   bool get isMainWindow =>
       tabType == DesktopTabType.main ||
       tabType == DesktopTabType.cm ||
@@ -524,14 +529,15 @@ class _DesktopTabState extends State<DesktopTab>
       Obx(() {
         if (stateGlobal.showTabBar.isTrue &&
             !(kUseCompatibleUiMode && isHideSingleItem())) {
-          final showBottomDivider = _showTabBarBottomDivider(tabType);
+          final showBottomDivider =
+              !_dkBar && _showTabBarBottomDivider(tabType);
+          final barHeight = _dkBar ? 32.0 : _kTabBarHeight;
           return SizedBox(
-            height: _kTabBarHeight,
+            height: barHeight,
             child: Column(
               children: [
                 SizedBox(
-                  height:
-                      showBottomDivider ? _kTabBarHeight - 1 : _kTabBarHeight,
+                  height: showBottomDivider ? barHeight - 1 : barHeight,
                   child: _buildBar(),
                 ),
                 if (showBottomDivider)
@@ -641,8 +647,16 @@ class _DesktopTabState extends State<DesktopTab>
                         child: const SizedBox(
                           width: 78,
                         )),
+                    if (_dkBar && !kUseCompatibleUiMode && !isMacOS)
+                      Row(children: [
+                        const SizedBox(width: 16),
+                        const DkSimbolo(size: 16),
+                        const SizedBox(width: 8),
+                        Text(bind.mainGetAppNameSync(), style: Dk.barra),
+                        const SizedBox(width: 16),
+                      ]),
                     Offstage(
-                      offstage: kUseCompatibleUiMode || isMacOS,
+                      offstage: _dkBar || kUseCompatibleUiMode || isMacOS,
                       child: Row(children: [
                         Offstage(
                           offstage: !showLogo,
@@ -660,7 +674,12 @@ class _DesktopTabState extends State<DesktopTab>
                       ),
                     ),
                     Expanded(
-                        child: Listener(
+                        child: Obx(() => Offstage(
+                            // Deskcel: a principal não mostra abas; a do cliente só com mais de uma conexão.
+                            offstage: tabType == DesktopTabType.main ||
+                                (tabType == DesktopTabType.cm &&
+                                    controller.state.value.tabs.length < 2),
+                            child: Listener(
                             // handle mouse wheel
                             onPointerSignal: (e) {
                               if (e is PointerScrollEvent) {
@@ -688,7 +707,7 @@ class _DesktopTabState extends State<DesktopTab>
                               unSelectedTabBackgroundColor:
                                   unSelectedTabBackgroundColor,
                               selectedBorderColor: selectedBorderColor,
-                            ))),
+                            ))))),
                   ],
                 ))),
         // hide simulated action buttons when we in compatible ui mode, because of reusing system title bar.
@@ -697,13 +716,14 @@ class _DesktopTabState extends State<DesktopTab>
           state: state,
           tabController: controller,
           invisibleTabKeys: invisibleTabKeys,
-          tail: tail,
+          tail: tabType == DesktopTabType.main ? null : tail,
+          dk: _dkBar,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
           onClose: onWindowCloseButton,
           labelGetter: labelGetter,
-        ).paddingOnly(left: 10)
+        ).paddingOnly(left: _dkBar ? 0 : 10)
       ],
     );
   }
@@ -718,6 +738,7 @@ class WindowActionPanel extends StatefulWidget {
   final bool showMaximize;
   final bool showClose;
   final Widget? tail;
+  final bool dk;
   final Future<bool> Function()? onClose;
 
   final RxList<String> invisibleTabKeys;
@@ -730,6 +751,7 @@ class WindowActionPanel extends StatefulWidget {
       required this.tabController,
       required this.invisibleTabKeys,
       this.tail,
+      this.dk = false,
       this.showMinimize = true,
       this.showMaximize = true,
       this.showClose = true,
@@ -780,8 +802,9 @@ class WindowActionPanelState extends State<WindowActionPanel> {
           Row(
             children: [
               if (widget.showMinimize && !isMacOS)
-                ActionIcon(
+                _btn(
                   message: 'Minimize',
+                  dkKind: 'min',
                   icon: IconFont.min,
                   onTap: () {
                     if (widget.isMainWindow) {
@@ -793,10 +816,12 @@ class WindowActionPanelState extends State<WindowActionPanel> {
                   isClose: false,
                 ),
               if (widget.showMaximize && !isMacOS)
-                Obx(() => ActionIcon(
+                Obx(() => _btn(
                       message: stateGlobal.isMaximized.isTrue
                           ? 'Restore'
                           : 'Maximize',
+                      dkKind:
+                          stateGlobal.isMaximized.isTrue ? 'restore' : 'max',
                       icon: stateGlobal.isMaximized.isTrue
                           ? IconFont.restore
                           : IconFont.max,
@@ -806,8 +831,9 @@ class WindowActionPanelState extends State<WindowActionPanel> {
                       isClose: false,
                     )),
               if (widget.showClose && !isMacOS)
-                ActionIcon(
+                _btn(
                   message: 'Close',
+                  dkKind: 'close',
                   icon: IconFont.close,
                   onTap: () async {
                     final res = await widget.onClose?.call() ?? true;
@@ -830,6 +856,19 @@ class WindowActionPanelState extends State<WindowActionPanel> {
           ),
       ],
     );
+  }
+
+  Widget _btn(
+      {required String message,
+      required String dkKind,
+      required IconData icon,
+      GestureTapCallback? onTap,
+      required bool isClose}) {
+    if (widget.dk) {
+      return DkWinButton(dkKind, onTap: onTap, tooltip: translate(message));
+    }
+    return ActionIcon(
+        message: message, icon: icon, onTap: onTap, isClose: isClose);
   }
 
   void _toggleMaximize() {

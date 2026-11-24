@@ -9,6 +9,9 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
+import 'package:flutter_hbb/desktop/pages/connection_page.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/page_body.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
@@ -273,9 +276,135 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     });
   }
 
+  /// Deskcel: coluna esquerda da tela 3 do modelo; todas as abas continuam no menu.
+  static const Map<SettingsTabKey, String> _dkIcons = {
+    SettingsTabKey.general: 'config',
+    SettingsTabKey.safety: 'cadeado',
+    SettingsTabKey.network: 'rede',
+    SettingsTabKey.display: 'monitor',
+    SettingsTabKey.account: 'pessoa',
+    SettingsTabKey.printer: 'arquivo',
+    SettingsTabKey.about: 'info',
+  };
+
+  void _dkVoltar() {
+    try {
+      Get.find<DesktopTabController>().closeBy(kTabLabelSettingPage);
+    } catch (e) {
+      debugPrint('$e');
+    }
+  }
+
+  Widget _buildDk(BuildContext context) {
+    final tabs = _settingTabs();
+    return Scaffold(
+      backgroundColor: Dk.off,
+      body: _buildBlock(children: <Widget>[
+        Container(
+          width: 300,
+          decoration: const BoxDecoration(
+              border: Border(right: BorderSide(color: Dk.linha, width: 1))),
+          child: Stack(children: [
+            Positioned(
+                left: 24,
+                top: 24,
+                child: DkSecondaryButton(translate('Back'),
+                    icon: 'voltar',
+                    iconColor: Dk.tinta,
+                    iconSize: 16,
+                    gap: 4,
+                    width: 96,
+                    height: 32,
+                    style: Dk.t(13, FontWeight.w500, 20),
+                    onTap: _dkVoltar)),
+            Positioned(
+                left: 24,
+                top: 80,
+                child: Text(translate('Settings'), style: Dk.tit)),
+            Positioned(
+              left: 24,
+              top: 128,
+              width: 252,
+              bottom: 56,
+              child: ListView(
+                children: [
+                  for (var i = 0; i < tabs.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                      child: _dkNavItem(tabs[i]),
+                    ),
+                ],
+              ),
+            ),
+            const Positioned(
+                left: 0,
+                top: 520,
+                width: 299,
+                height: 48,
+                child: OnlineStatusWidget(dk: true)),
+          ]),
+        ),
+        Expanded(
+          child: Container(
+            color: Dk.off,
+            child: PageView(
+              controller: controller,
+              physics: NeverScrollableScrollPhysics(),
+              children: _children(),
+            ),
+          ),
+        )
+      ]),
+    );
+  }
+
+  Widget _dkNavItem(_TabInfo tab) {
+    return Obx(() {
+      final selected = tab.key == selectedTab.value;
+      return SizedBox(
+        height: 40,
+        child: Material(
+          color: selected ? Dk.branco : Colors.transparent,
+          shape: StadiumBorder(
+              side: selected
+                  ? const BorderSide(color: Dk.linha, width: 1)
+                  : BorderSide.none),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            hoverColor: Dk.tinta.withOpacity(.04),
+            onTap: () {
+              if (selectedTab.value != tab.key) {
+                int index = DesktopSettingPage.tabKeys.indexOf(tab.key);
+                if (index == -1) {
+                  return;
+                }
+                controller.jumpToPage(index);
+              }
+              selectedTab.value = tab.key;
+            },
+            child: Stack(children: [
+              Positioned(
+                  left: 16,
+                  top: 10,
+                  child: DkIcon(_dkIcons[tab.key] ?? 'config',
+                      color: selected ? Dk.terracota : Dk.apoio)),
+              Positioned(
+                  left: 48,
+                  top: 10,
+                  child: Text(translate(tab.label),
+                      style: Dk.t(14,
+                          selected ? FontWeight.w500 : FontWeight.w400, 20))),
+            ]),
+          ),
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (isDesktop) return _buildDk(context);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       body: _buildBlock(
@@ -2570,6 +2699,114 @@ class _About extends StatefulWidget {
 }
 
 class _AboutState extends State<_About> {
+  Widget _dkAbout(
+      {required String license,
+      required String version,
+      required String buildDate,
+      required String fingerprint,
+      required String myId}) {
+    final data = buildDate.length >= 10
+        ? '${buildDate.substring(8, 10)}/${buildDate.substring(5, 7)}/${buildDate.substring(0, 4)}'
+        : buildDate;
+    final linhas = <(String, String, VoidCallback?)>[
+      (translate('Version'), '$version ($data)', null),
+      (
+        'Site',
+        'hostcel.com.br',
+        () => launchUrlString('https://hostcel.com.br')
+      ),
+      ('WhatsApp', '(81) 9326-7690', null),
+      ('Endereço', 'Rua das Moças, 773 · Arruda, Recife/PE', null),
+      (translate('ID'), myId, null),
+      if (!isWeb) (translate('Fingerprint'), fingerprint, null),
+    ];
+    return SingleChildScrollView(
+      child: SizedBox(
+        width: 600,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(36, 80, 36, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(translate('About'), style: Dk.tit),
+              Text('Informações do programa e do suporte da Hostcel.',
+                      style: Dk.desc)
+                  .marginOnly(bottom: 16),
+              DkCard(
+                width: 528,
+                height: 96,
+                child: Stack(children: [
+                  const Positioned(
+                      left: 24, top: 32, child: DkSimbolo(size: 32)),
+                  Positioned(
+                      left: 72,
+                      top: 24,
+                      child: Text(bind.mainGetAppNameSync(),
+                          style: Dk.t(18, FontWeight.w600, 24, ls: -.03))),
+                  Positioned(
+                      left: 72,
+                      top: 48,
+                      child:
+                          Text('Hostcel – suporte remoto', style: Dk.desc)),
+                  Positioned(
+                      left: 296,
+                      top: 28,
+                      child: DkSecondaryButton('Verificar atualizações',
+                          icon: 'baixar',
+                          width: 208,
+                          height: 40,
+                          onTap: () => launchUrlString(
+                              'https://hostcel.com.br/deskcel'))),
+                ]),
+              ),
+              const SizedBox(height: 16),
+              DkCard(
+                width: 528,
+                child: Column(children: [
+                  for (var i = 0; i < linhas.length; i++) ...[
+                    if (i > 0)
+                      const Divider(height: 1, thickness: 1, color: Dk.linha),
+                    SizedBox(
+                      height: 48,
+                      child: Stack(children: [
+                        Positioned(
+                            left: 24,
+                            top: 14,
+                            child: Text(linhas[i].$1, style: Dk.desc)),
+                        Positioned(
+                          left: 176,
+                          top: 14,
+                          right: 24,
+                          child: SelectionArea(
+                            child: linhas[i].$3 == null
+                                ? Text(linhas[i].$2,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Dk.t(14, FontWeight.w500, 20))
+                                : InkWell(
+                                    onTap: linhas[i].$3,
+                                    child: Text(linhas[i].$2,
+                                        style: Dk.t(14, FontWeight.w500, 20,
+                                            color: Dk.terracota))),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ],
+                ]),
+              ),
+              const SizedBox(height: 24),
+              Text('Baseado em software livre (licença AGPL-3.0)',
+                  style: Dk.peq),
+              if (license.isNotEmpty) Text(license, style: Dk.peq),
+              Text('© ${DateTime.now().year} Hostcel', style: Dk.peq),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return futureBuilder(future: () async {
@@ -2591,6 +2828,14 @@ class _AboutState extends State<_About> {
       final buildDate = data['buildDate'].toString();
       final fingerprint = data['fingerprint'].toString();
       final myId = data['myId'].toString();
+      if (isDesktop) {
+        return _dkAbout(
+            license: license,
+            version: version,
+            buildDate: buildDate,
+            fingerprint: fingerprint,
+            myId: myId);
+      }
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
       final scrollController = ScrollController();
       return SingleChildScrollView(
@@ -2681,6 +2926,11 @@ Widget _Card(
         child: SizedBox(
           width: _kCardFixedWidth,
           child: Card(
+            elevation: 0,
+            color: Dk.branco,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(Dk.rCartao),
+                side: const BorderSide(color: Dk.linha, width: 1)),
             child: Column(
               children: [
                 Row(
@@ -2689,18 +2939,15 @@ Widget _Card(
                         child: Text(
                       translate(title),
                       textAlign: TextAlign.start,
-                      style: const TextStyle(
-                        fontSize: _kTitleFontSize,
-                      ),
+                      style: Dk.sub,
                     )),
                     ...?title_suffix
                   ],
-                ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
-                ...children
-                    .map((e) => e.marginOnly(top: 4, right: _kContentHMargin)),
+                ).marginOnly(left: 24, top: 16, bottom: 8),
+                ...children.map((e) => e.marginOnly(top: 4, right: 24)),
               ],
-            ).marginOnly(bottom: 10),
-          ).marginOnly(left: _kCardLeftMargin, top: 15),
+            ).marginOnly(bottom: 16),
+          ).marginOnly(left: 36, top: 16),
         ),
       ),
     ],

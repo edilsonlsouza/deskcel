@@ -9,6 +9,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
@@ -59,6 +60,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
+    if (!isIncomingOnly && !bind.isOutgoingOnly()) {
+      // Deskcel: layout do modelo (as variantes só-entrada/só-saída seguem o layout antigo).
+      return _buildBlock(
+          child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          buildDkLeftPane(context),
+          Expanded(child: buildRightPane(context)),
+        ],
+      ));
+    }
     return _buildBlock(
         child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,6 +187,164 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ],
         ),
       ),
+    );
+  }
+
+  /// Coluna "Receber suporte" do modelo (300 px, coordenadas do deskcel-layout.html).
+  Widget buildDkLeftPane(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: gFFI.serverModel,
+      child: Consumer<ServerModel>(builder: (context, model, child) {
+        return Container(
+          width: 300,
+          decoration: const BoxDecoration(
+            color: Dk.off,
+            border: Border(right: BorderSide(color: Dk.linha, width: 1)),
+          ),
+          child: Obx(() {
+            final pronto = !svcStopped.value &&
+                stateGlobal.svcStatus.value == SvcStatus.ready;
+            final showOneTime = model.approveMode != 'click' &&
+                model.verificationMethod != kUsePermanentPassword;
+            void copiar(String text) {
+              Clipboard.setData(ClipboardData(text: text));
+              showToast(translate("Copied"));
+            }
+
+            return Stack(children: [
+              const Positioned(left: 24, top: 24, child: DkSimbolo(size: 32)),
+              Positioned(
+                  left: 64,
+                  top: 24,
+                  child: Text(bind.mainGetAppNameSync(), style: Dk.marca)),
+              Positioned(
+                  left: 64, top: 40, child: Text('por Hostcel', style: Dk.marca2)),
+              Positioned(
+                  left: 24,
+                  top: 80,
+                  width: 252,
+                  child: Text('Receber suporte', style: Dk.tit)),
+              Positioned(
+                  left: 24,
+                  top: 112,
+                  width: 252,
+                  child: Text(
+                      'Passe o ID e a senha abaixo para o técnico da Hostcel.',
+                      style: Dk.desc)),
+              Positioned(
+                left: 24,
+                top: 168,
+                child: DkCard(
+                  width: 252,
+                  height: 96,
+                  child: Stack(children: [
+                    Positioned(
+                        left: 24,
+                        top: 16,
+                        child: Text('SEU ID', style: Dk.et)),
+                    Positioned(
+                        left: 24,
+                        top: 40,
+                        child: Text(
+                            pronto ? model.serverId.text : '••• ••• •••',
+                            style: pronto
+                                ? Dk.id
+                                : Dk.id.copyWith(color: Dk.apoio))),
+                    Positioned(
+                        left: 192,
+                        top: 28,
+                        child: DkIconButton('copiar',
+                            tooltip: translate('Copy'),
+                            onTap: pronto
+                                ? () => copiar(model.serverId.text)
+                                : null)),
+                  ]),
+                ),
+              ),
+              Positioned(
+                left: 24,
+                top: 280,
+                child: DkCard(
+                  width: 252,
+                  height: 96,
+                  child: Stack(children: [
+                    Positioned(
+                        left: 24,
+                        top: 16,
+                        child: Text('SENHA', style: Dk.et)),
+                    Positioned(
+                        left: 24,
+                        top: 40,
+                        width: 116,
+                        child: Text(
+                            pronto ? model.serverPasswd.text : '••••••',
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            style: pronto
+                                ? Dk.senha
+                                : Dk.senha.copyWith(color: Dk.apoio))),
+                    if (showOneTime)
+                      Positioned(
+                          left: 144,
+                          top: 28,
+                          child: DkIconButton('nova',
+                              tooltip: translate('Refresh Password'),
+                              onTap: pronto
+                                  ? () => bind.mainUpdateTemporaryPassword()
+                                  : null)),
+                    Positioned(
+                        left: 192,
+                        top: 28,
+                        child: showOneTime
+                            ? DkIconButton('copiar',
+                                tooltip: translate('Copy'),
+                                onTap: pronto
+                                    ? () => copiar(model.serverPasswd.text)
+                                    : null)
+                            : DkIconButton('config',
+                                tooltip: translate('Change Password'),
+                                onTap: bind.isDisableSettings()
+                                    ? null
+                                    : () => DesktopSettingPage.switch2page(
+                                        SettingsTabKey.safety))),
+                  ]),
+                ),
+              ),
+              const Positioned(
+                  left: 24,
+                  top: 392,
+                  child: DkIcon('escudo', color: Dk.terracota)),
+              Positioned(
+                  left: 52,
+                  top: 394,
+                  width: 224,
+                  child: Text(
+                      'Só passe a senha para quem você chamou. A Hostcel nunca pede acesso sem você pedir.',
+                      style: Dk.peq)),
+              // Avisos do programa (instalar, permissões, erros), sem tirar nenhum.
+              Positioned(
+                left: 24,
+                top: 448,
+                width: 252,
+                bottom: 56,
+                child: SingleChildScrollView(
+                  controller: _leftPaneScrollController,
+                  child: Column(children: [
+                    buildPresetPasswordWarning(),
+                    Obx(() => buildHelpCards(stateGlobal.updateUrl.value)),
+                  ]),
+                ),
+              ),
+              const Positioned(
+                  left: 0,
+                  top: 520,
+                  width: 299,
+                  height: 48,
+                  child: OnlineStatusWidget(dk: true)),
+            ]);
+          }),
+        );
+      }),
     );
   }
 
@@ -601,6 +771,43 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     }
 
+    if (!bind.isIncomingOnly() && !bind.isOutgoingOnly()) {
+      // Deskcel: aviso em cartão do modelo, com as mesmas ações.
+      return DkCard(
+        radius: 22,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (title.isNotEmpty || closeButton == true)
+                Row(children: [
+                  Expanded(child: Text(translate(title), style: Dk.rot)),
+                  if (closeButton == true)
+                    DkIconButton('x',
+                        size: 24,
+                        iconSize: 16,
+                        background: Dk.branco,
+                        onTap: closeCard),
+                ]),
+              if (content.isNotEmpty)
+                Text(translate(content), style: Dk.peq)
+                    .marginOnly(top: 4, bottom: 8),
+              if (btnText.isNotEmpty)
+                DkSecondaryButton(translate(btnText),
+                    icon: 'baixar', width: 220, height: 32, onTap: onPressed),
+              if (help != null && link != null)
+                InkWell(
+                  onTap: () async => await launchUrl(Uri.parse(link)),
+                  child: Text(translate(help),
+                      style: Dk.t(13, FontWeight.w500, 24,
+                          color: Dk.terracota)),
+                ),
+            ],
+          ),
+        ),
+      ).marginOnly(bottom: 8);
+    }
     return Stack(
       children: [
         Container(

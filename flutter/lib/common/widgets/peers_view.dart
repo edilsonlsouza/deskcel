@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
@@ -187,6 +188,40 @@ class _PeersViewState extends State<_PeersView>
       child: Consumer<Peers>(builder: (context, peers, child) {
         if (peers.peers.isEmpty) {
           gFFI.peerTabModel.setCurrentTabCachedPeers([]);
+          if (isDesktop) {
+            // Deskcel: estado vazio do modelo.
+            final recent = widget.peers.loadEvent == LoadEvent.recent;
+            return Align(
+              alignment: Alignment.topCenter,
+              child: DkCard(
+                height: 208,
+                child: Column(children: [
+                  const SizedBox(height: 48),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: const BoxDecoration(
+                        color: Dk.off, shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: const DkIcon('relogio',
+                        size: 24, color: Dk.terracota),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                      recent
+                          ? 'Nenhum acesso recente'
+                          : translate(_emptyMessages[widget.peers.loadEvent] ??
+                              'Empty'),
+                      textAlign: TextAlign.center,
+                      style: Dk.t(15, FontWeight.w600, 20, ls: -.03)),
+                  const SizedBox(height: 4),
+                  if (recent)
+                    Text('Os computadores que você acessar vão aparecer aqui.',
+                        textAlign: TextAlign.center, style: Dk.desc),
+                ]),
+              ),
+            );
+          }
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -251,7 +286,7 @@ class _PeersViewState extends State<_PeersView>
               // and the peers change event will trigger _buildPeersView().
               return !isPortrait
                   ? Obx(() => peerCardUiType.value == PeerUiType.list
-                      ? Container(height: 45, child: visibilityChild)
+                      ? Container(height: isDesktop ? 64 : 45, child: visibilityChild)
                       : peerCardUiType.value == PeerUiType.grid
                           ? SizedBox(
                               width: 220, height: 140, child: visibilityChild)
@@ -276,10 +311,11 @@ class _PeersViewState extends State<_PeersView>
                         controller: _scrollController,
                         itemCount: peers.length,
                         itemBuilder: (BuildContext context, int index) {
+                          // Deskcel: cartões de 64 px separados por 8 px.
                           return buildOnePeer(peers[index], false).marginOnly(
-                              right: space,
-                              top: index == 0 ? 0 : space / 2,
-                              bottom: space / 2);
+                              right: isDesktop ? 0 : space,
+                              top: index == 0 ? 0 : (isDesktop ? 4 : space / 2),
+                              bottom: isDesktop ? 4 : space / 2);
                         },
                       )
                     : DynamicGridView.builder(

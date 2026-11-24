@@ -168,3 +168,42 @@ jobs:
           name: Deskcel-windows-x64
           path: ./out/Deskcel.exe
           if-no-files-found: error
+
+      # Abre o programa no runner e fotografa a janela, para comparar com o modelo.
+      - name: Foto da janela principal
+        continue-on-error: true
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type @"
+          using System; using System.Runtime.InteropServices;
+          public class W { [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+            [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+            public struct R { public int L, T, Ri, B; } }
+          "@
+          [W]::SetProcessDPIAware() | Out-Null
+          $p = Start-Process .\rustdesk\rustdesk.exe -PassThru
+          Start-Sleep 40
+          $w = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.ProcessName -eq 'rustdesk' } | Select-Object -First 1
+          mkdir fotos -Force | Out-Null
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("fotos\tela-inteira.png")
+          if ($w) {
+            [W]::SetForegroundWindow($w.MainWindowHandle) | Out-Null; Start-Sleep 2
+            $r = New-Object W+R; [W]::GetWindowRect($w.MainWindowHandle, [ref]$r) | Out-Null
+            "janela: $($r.L),$($r.T) $($r.Ri - $r.L)x$($r.B - $r.T)" | Tee-Object fotos\janela.txt
+            $c = New-Object System.Drawing.Bitmap ($r.Ri - $r.L), ($r.B - $r.T)
+            $g2 = [System.Drawing.Graphics]::FromImage($c); $g2.CopyFromScreen($r.L, $r.T, 0, 0, $c.Size)
+            $c.Save("fotos\janela-principal.png")
+          }
+
+      - name: Upload das fotos
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fotos
+          path: ./fotos
+          if-no-files-found: ignore

@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -17,6 +18,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../common.dart';
+import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/chat_page.dart';
 import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
@@ -361,6 +363,12 @@ class ConnectionManagerState extends State<ConnectionManager>
 }
 
 Widget buildConnectionCard(Client client) {
+  if (isDesktop) {
+    // Deskcel: telas 2a (pedido) e 2b (aceito) do modelo.
+    return Consumer<ServerModel>(
+        builder: (context, value, child) =>
+            _DkCmCard(key: ValueKey(client.id), client: client));
+  }
   return Consumer<ServerModel>(
     builder: (context, value, child) => Column(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -383,6 +391,445 @@ Widget buildConnectionCard(Client client) {
       ],
     ).paddingSymmetric(vertical: 4.0, horizontal: 8.0),
   );
+}
+
+/// Deskcel: janela do cliente (320 × 520) no desenho do modelo, com todas as funções da original.
+class _DkCmCard extends StatefulWidget {
+  final Client client;
+  const _DkCmCard({Key? key, required this.client}) : super(key: key);
+
+  @override
+  State<_DkCmCard> createState() => _DkCmCardState();
+}
+
+class _DkCmCardState extends State<_DkCmCard>
+    with AutomaticKeepAliveClientMixin {
+  Client get client => widget.client;
+  final _time = 0.obs;
+  Timer? _timer;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(Duration(seconds: 1), (_) {
+      if (client.authorized && !client.disconnected) {
+        _time.value = _time.value + 1;
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      gFFI.serverModel.tabController.onSelected?.call(client.id.toString());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _click(VoidCallback f) => checkClickTime(client.id, f);
+
+  String get _tipo {
+    switch (client.type_()) {
+      case ClientType.file:
+        return translate('Transfer file');
+      case ClientType.camera:
+        return translate('View camera');
+      case ClientType.terminal:
+        return translate('Terminal');
+      default:
+        return client.portForward.isNotEmpty
+            ? 'Port Forward: ${client.portForward}'
+            : '';
+    }
+  }
+
+  Widget _avatar() {
+    final fallback = Container(
+      width: 64,
+      height: 64,
+      decoration: const BoxDecoration(color: Dk.branco, shape: BoxShape.circle),
+      foregroundDecoration: BoxDecoration(
+          shape: BoxShape.circle, border: Border.all(color: Dk.linha)),
+      alignment: Alignment.center,
+      child: const DkIcon('pessoa', size: 32, color: Dk.terracota),
+    );
+    return buildAvatarWidget(
+            avatar: client.avatar,
+            size: 64,
+            borderRadius: 32,
+            fallback: fallback) ??
+        fallback;
+  }
+
+  Widget _centro(double top, Widget child) =>
+      Positioned(left: 24, top: top, width: 272, child: Center(child: child));
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final model = Provider.of<ServerModel>(context);
+    final children = client.authorized
+        ? (client.disconnected
+            ? _buildDesconectado(context)
+            : _buildAceito(context, model))
+        : _buildPedido(context, model);
+    return Container(
+        color: Dk.off, child: SizedBox.expand(child: Stack(children: children)));
+  }
+
+  List<Widget> _buildPedido(BuildContext context, ServerModel model) {
+    final canElevate = bind.cmCanElevate();
+    final showElevation = canElevate &&
+        model.showElevation &&
+        client.type_() == ClientType.remote &&
+        bind.mainGetBuildinOption(
+                key: kOptionHideElevateButtonInAcceptWindow) !=
+            'Y';
+    final showAccept = model.approveMode != 'password';
+    final explicacao = client.type_() == ClientType.file
+        ? 'Ele vai poder enviar e receber arquivos deste computador.'
+        : 'Ele vai ver a sua tela e poderá usar o mouse e o teclado deste computador.';
+    return [
+      _centro(
+          24,
+          Text('PEDIDO DE ACESSO',
+              style: Dk.et.copyWith(color: Dk.terracota))),
+      Positioned(left: 128, top: 56, child: _avatar()),
+      _centro(
+          136,
+          Text(client.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Dk.t(18, FontWeight.w600, 24, ls: -.03))),
+      _centro(
+          160,
+          Text(
+              _tipo.isEmpty
+                  ? 'Técnico da Hostcel'
+                  : 'Técnico da Hostcel · $_tipo',
+              style: Dk.desc)),
+      Positioned(
+        left: 24,
+        top: 192,
+        child: DkCard(
+          width: 272,
+          height: 64,
+          child: Stack(children: [
+            Positioned(
+                left: 24, top: 12, child: Text('ID DO TÉCNICO', style: Dk.et)),
+            Positioned(
+                left: 24,
+                top: 28,
+                child: Text(formatID(client.peerId),
+                    style: Dk.t(18, FontWeight.w500, 24, family: Dk.mono))),
+          ]),
+        ),
+      ),
+      Positioned(
+          left: 24,
+          top: 272,
+          width: 272,
+          child: Text(explicacao,
+              textAlign: TextAlign.center,
+              style: Dk.desc.copyWith(color: Dk.tinta))),
+      if (showElevation && showAccept)
+        Positioned(
+            left: 24,
+            top: 312,
+            child: Tooltip(
+              message: translate('accept_and_elevate_btn_tooltip'),
+              child: DkSecondaryButton(translate('Accept and Elevate'),
+                  icon: 'escudo',
+                  width: 272,
+                  height: 40,
+                  onTap: () => _click(() {
+                        model.sendLoginResponse(client, true);
+                        model.setShowElevation(false);
+                        bind.cmElevatePortable(connId: client.id);
+                        windowManager.minimize();
+                      })),
+            )),
+      if (showAccept)
+        Positioned(
+            left: 24,
+            top: 360,
+            child: DkPrimaryButton('Aceitar',
+                icon: 'check',
+                width: 272,
+                onTap: () => _click(() {
+                      model.sendLoginResponse(client, true);
+                      windowManager.minimize();
+                    }))),
+      Positioned(
+          left: 24,
+          top: 416,
+          child: DkSecondaryButton('Recusar',
+              icon: 'x',
+              iconColor: Dk.tinta,
+              width: 272,
+              height: 48,
+              style: Dk.t(15, FontWeight.w500, 20),
+              onTap: () =>
+                  _click(() => bind.cmCloseConnection(connId: client.id)))),
+    ];
+  }
+
+  Widget _linha(
+      {required String icon,
+      required String nome,
+      required bool valor,
+      required String perm,
+      required bool canModify,
+      required void Function(bool) set}) {
+    return SizedBox(
+      height: 48,
+      child: Stack(children: [
+        Positioned(
+            left: 20,
+            top: 14,
+            child: DkIcon(icon, color: valor ? Dk.terracota : Dk.apoio)),
+        Positioned(
+            left: 52,
+            top: 14,
+            right: 72,
+            child: Text(nome,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Dk.t(14, FontWeight.w400, 20,
+                    color: valor ? Dk.tinta : Dk.apoio))),
+        Positioned(
+          left: 212,
+          top: 12,
+          child: DkSwitch(
+            value: valor,
+            onChanged: canModify
+                ? (v) => _click(() {
+                      bind.cmSwitchPermission(
+                          connId: client.id, name: perm, enabled: v);
+                      setState(() => set(v));
+                    })
+                : null,
+          ),
+        ),
+      ]),
+    );
+  }
+
+  List<Widget> _buildAceito(BuildContext context, ServerModel model) {
+    final canModify =
+        bind.mainGetBuildinOption(key: kOptionEnablePermChangeInAcceptWindow) !=
+            'N';
+    final showPerms = !(client.type_() == ClientType.file ||
+        client.type_() == ClientType.portForward ||
+        client.type_() == ClientType.terminal);
+    final linhas = <Widget>[];
+    void add(String icon, String nome, bool valor, String perm,
+        void Function(bool) set) {
+      if (linhas.isNotEmpty) {
+        linhas.add(const Divider(height: 1, thickness: 1, color: Dk.linha));
+      }
+      linhas.add(_linha(
+          icon: icon,
+          nome: nome,
+          valor: valor,
+          perm: perm,
+          canModify: canModify,
+          set: set));
+    }
+
+    if (client.type_() == ClientType.camera) {
+      add('audio', 'Áudio', client.audio, 'audio', (v) => client.audio = v);
+      add('monitor', translate('Enable recording session'), client.recording,
+          'recording', (v) => client.recording = v);
+    } else {
+      add('teclado', 'Teclado e mouse', client.keyboard, 'keyboard',
+          (v) => client.keyboard = v);
+      add('prancheta', 'Área de transferência', client.clipboard, 'clipboard',
+          (v) => client.clipboard = v);
+      add('arquivo', 'Arquivos', client.file, 'file', (v) => client.file = v);
+      add('audio', 'Áudio', client.audio, 'audio', (v) => client.audio = v);
+      add('nova', translate('Enable remote restart'), client.restart,
+          'restart', (v) => client.restart = v);
+      add('monitor', translate('Enable recording session'), client.recording,
+          'recording', (v) => client.recording = v);
+      if (isWindows) {
+        add('cadeado', translate('Enable blocking user input'),
+            client.blockInput, 'block_input', (v) => client.blockInput = v);
+      }
+      if (bind.mainSupportedPrivacyModeImpls() != '[]') {
+        add('escudo', translate('Enable privacy mode'), client.privacyMode,
+            'privacy_mode', (v) => client.privacyMode = v);
+      }
+    }
+
+    final showElevation = bind.cmCanElevate() &&
+        model.showElevation &&
+        client.type_() == ClientType.remote;
+    final extras = <Widget>[
+      if (client.incomingVoiceCall) ...[
+        DkSecondaryButton(translate('Accept'),
+            icon: 'audio',
+            width: 132,
+            height: 40,
+            onTap: () => _click(() => bind.cmHandleIncomingVoiceCall(
+                id: client.id, accept: true))),
+        DkSecondaryButton(translate('Dismiss'),
+            icon: 'x',
+            width: 132,
+            height: 40,
+            onTap: () => _click(() => bind.cmHandleIncomingVoiceCall(
+                id: client.id, accept: false))),
+      ],
+      if (client.inVoiceCall)
+        DkSecondaryButton(translate('Stop voice call'),
+            icon: 'x',
+            width: 272,
+            height: 40,
+            onTap: () => _click(() => bind.cmCloseVoiceCall(id: client.id))),
+      if (client.fromSwitch)
+        DkSecondaryButton(translate('Switch Sides'),
+            icon: 'voltar',
+            width: 272,
+            height: 40,
+            onTap: () => _click(() => bind.cmSwitchBack(connId: client.id))),
+      if (showElevation)
+        DkSecondaryButton(translate('Elevate'),
+            icon: 'escudo',
+            width: 272,
+            height: 40,
+            onTap: () => _click(() {
+                  model.setShowElevation(false);
+                  bind.cmElevatePortable(connId: client.id);
+                  windowManager.minimize();
+                })),
+    ];
+    final podeChat = client.type_() == ClientType.remote ||
+        client.type_() == ClientType.file ||
+        client.type_() == ClientType.camera;
+    final isFile = client.type_() == ClientType.file;
+
+    return [
+      _centro(
+          24,
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+                width: 8,
+                height: 8,
+                decoration:
+                    const BoxDecoration(color: Dk.ok, shape: BoxShape.circle)),
+            const SizedBox(width: 8),
+            Text('CONECTADO HÁ', style: Dk.et),
+          ])),
+      _centro(
+          40,
+          Obx(() => Text(formatDurationToTime(Duration(seconds: _time.value)),
+              style: Dk.t(32, FontWeight.w600, 40, ls: -.03).copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()])))),
+      _centro(
+          88,
+          Text.rich(
+            TextSpan(style: Dk.desc, children: [
+              TextSpan(
+                  text:
+                      '${client.name}${_tipo.isEmpty ? '' : ' · $_tipo'} · ID '),
+              TextSpan(
+                  text: formatID(client.peerId),
+                  style: Dk.t(12, FontWeight.w500, 20,
+                      color: Dk.apoio, family: Dk.mono)),
+            ]),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )),
+      if (podeChat)
+        Positioned(
+          right: 16,
+          top: 16,
+          child: DkIconButton(isFile ? 'arquivo' : 'mais',
+              size: 32,
+              background: Dk.branco,
+              border: true,
+              tooltip: isFile ? translate('Transfer file') : translate('Chat'),
+              onTap: () => _click(() {
+                    if (isFile) {
+                      gFFI.chatModel.toggleCMFilePage();
+                    } else {
+                      gFFI.chatModel.toggleCMChatPage(
+                          MessageKey(client.peerId, client.id));
+                    }
+                  })),
+        ),
+      if (showPerms) ...[
+        Positioned(
+            left: 24, top: 128, child: Text('PERMISSÕES', style: Dk.et)),
+        Positioned(
+          left: 24,
+          top: 152,
+          child: DkCard(
+            width: 272,
+            height: 192,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(Dk.rCartao),
+              child: SingleChildScrollView(child: Column(children: linhas)),
+            ),
+          ),
+        ),
+      ],
+      if (extras.isEmpty)
+        Positioned(
+            left: 24,
+            top: 360,
+            width: 272,
+            child: Text('Desligue qualquer permissão a qualquer momento.',
+                style: Dk.peq))
+      else
+        Positioned(
+            left: 24,
+            top: 352,
+            width: 272,
+            child: Wrap(spacing: 8, runSpacing: 8, children: extras)),
+      Positioned(
+          left: 24,
+          top: 416,
+          child: DkPrimaryButton('Encerrar acesso',
+              icon: 'encerrar',
+              width: 272,
+              onTap: () =>
+                  _click(() => bind.cmCloseConnection(connId: client.id)))),
+    ];
+  }
+
+  List<Widget> _buildDesconectado(BuildContext context) {
+    return [
+      _centro(24, Text(translate('Disconnected').toUpperCase(), style: Dk.et)),
+      Positioned(left: 128, top: 56, child: _avatar()),
+      _centro(
+          136,
+          Text(client.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Dk.t(18, FontWeight.w600, 24, ls: -.03))),
+      _centro(
+          160,
+          Obx(() => Text(formatDurationToTime(Duration(seconds: _time.value)),
+              style: Dk.desc))),
+      Positioned(
+          left: 24,
+          top: 416,
+          child: DkPrimaryButton(translate('Close'),
+              width: 272,
+              onTap: () => _click(() async {
+                    await bind.cmRemoveDisconnectedConnection(
+                        connId: client.id);
+                    if (await bind.cmGetClientsLength() == 0) {
+                      windowManager.close();
+                    }
+                  }))),
+    ];
+  }
 }
 
 class _AppIcon extends StatelessWidget {

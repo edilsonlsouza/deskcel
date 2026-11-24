@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -22,7 +23,7 @@ typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
 
 enum PeerUiType { grid, tile, list }
 
-final peerCardUiType = PeerUiType.grid.obs;
+final peerCardUiType = PeerUiType.list.obs; // Deskcel: lista é o padrão do modelo
 
 bool? hideUsernameOnCard;
 
@@ -49,7 +50,8 @@ class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
   final double _cardRadius = 16;
-  final double _tileRadius = 5;
+  double get _tileRadius =>
+      isDesktop && peerCardUiType.value == PeerUiType.list ? Dk.rCartao : 5;
   final double _borderWidth = 2;
 
   @override
@@ -134,7 +136,76 @@ class _PeerCardState extends State<_PeerCard>
     return peerTabShowNote(widget.tab) && peer.note.isNotEmpty;
   }
 
+  /// Deskcel: cartão de acesso do modelo (64 px, raio 28, círculo com ícone, nome e ID).
+  Widget _makeDkChild(Peer peer) {
+    final nome = peer.alias.isNotEmpty
+        ? peer.alias
+        : (peer.hostname.isNotEmpty ? peer.hostname : formatID(peer.id));
+    final showNote = _showNote(peer);
+    return DkCard(
+      child: Stack(children: [
+        Positioned(
+          left: 12,
+          top: 12,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration:
+                const BoxDecoration(color: Dk.off, shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: const DkIcon('monitor'),
+          ),
+        ),
+        if (peer.online)
+          Positioned(
+              left: 44,
+              top: 12,
+              child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                      color: Dk.ok,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Dk.branco, width: 1.5)))),
+        Positioned(
+          left: 64,
+          top: 12,
+          right: 120,
+          child: Text(nome,
+              style: Dk.item, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        Positioned(
+          left: 64,
+          top: 32,
+          right: 120,
+          child: Text(
+              showNote ? '${formatID(peer.id)} · ${peer.note}' : formatID(peer.id),
+              style: Dk.idp,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ),
+        Positioned(
+          right: 52,
+          top: 20,
+          child: checkBoxOrActionMoreLandscape(peer, isTile: true),
+        ),
+        Positioned(
+          right: 16,
+          top: 16,
+          child: DkIconButton('seta',
+              size: 32,
+              iconSize: 16,
+              tooltip: translate('Connect'),
+              onTap: () => widget.connect(context, peer.id)),
+        ),
+      ]),
+    );
+  }
+
   makeChild(bool isPortrait, Peer peer) {
+    if (isDesktop && !isPortrait && peerCardUiType.value == PeerUiType.list) {
+      return _makeDkChild(peer);
+    }
     final name = hideUsernameOnCard == true
         ? peer.hostname
         : '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';

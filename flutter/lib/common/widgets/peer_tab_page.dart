@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common/widgets/my_group.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/deskcel/dk.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
@@ -119,6 +120,14 @@ class _PeerTabPageState extends State<PeerTabPage>
                 child: selectionWrap(Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // Deskcel: título da aba atual, como "Acessos recentes" no modelo.
+                    if (isDesktop && stateGlobal.isPortrait.isFalse)
+                      Text(
+                          model.currentTab == PeerTabIndex.recent.index
+                              ? 'Acessos recentes'
+                              : model.tabTooltip(model.currentTab),
+                          style: Dk.sub)
+                        .marginOnly(right: 12),
                     Expanded(
                         child: visibleContextMenuListener(
                             _createSwitchBar(context))),
@@ -129,7 +138,8 @@ class _PeerTabPageState extends State<PeerTabPage>
                   ],
                 )),
               ),
-            ).paddingOnly(right: stateGlobal.isPortrait.isTrue ? 0 : 12)),
+            ).paddingOnly(
+                right: stateGlobal.isPortrait.isTrue || isDesktop ? 0 : 12)),
         _createPeersView(),
       ],
     );
@@ -145,10 +155,12 @@ class _PeerTabPageState extends State<PeerTabPage>
         physics: NeverScrollableScrollPhysics(),
         children: model.visibleEnabledOrderedIndexs.map((t) {
           final selected = model.currentTab == t;
-          final color = selected
-              ? MyTheme.tabbar(context).selectedTextColor
-              : MyTheme.tabbar(context).unSelectedTextColor
-            ?..withOpacity(0.5);
+          final color = isDesktop
+              ? (selected ? Dk.terracota : Dk.apoio)
+              : selected
+                  ? MyTheme.tabbar(context).selectedTextColor
+                  : MyTheme.tabbar(context).unSelectedTextColor
+                ?..withOpacity(0.5);
           final hover = false.obs;
           final deco = BoxDecoration(
               color: Theme.of(context).colorScheme.background,
@@ -170,7 +182,8 @@ class _PeerTabPageState extends State<PeerTabPage>
                         decoration: (hover.value
                             ? (selected ? decoBorder : deco)
                             : (selected ? decoBorder : null)),
-                        child: Icon(model.tabIcon(t), color: color)
+                        child: Icon(model.tabIcon(t),
+                                color: color, size: isDesktop ? 20 : null)
                             .paddingSymmetric(horizontal: 4),
                       ).paddingSymmetric(horizontal: 4),
                       onTap: isOptionFixed(kOptionPeerTabIndex)
@@ -205,8 +218,10 @@ class _PeerTabPageState extends State<PeerTabPage>
       }
     }
     return Expanded(
-        child: child.marginSymmetric(
-            vertical: (isDesktop || isWebDesktop) ? 12.0 : 6.0));
+        child: isDesktop
+            // Deskcel: a lista começa 32 px abaixo do título, como no modelo.
+            ? child
+            : child.marginSymmetric(vertical: isWebDesktop ? 12.0 : 6.0));
   }
 
   Widget _createRefresh(
