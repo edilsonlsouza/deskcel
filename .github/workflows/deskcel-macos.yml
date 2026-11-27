@@ -1,0 +1,187 @@
+# Deskcel (Hostcel): app para macOS (Intel e Apple Silicon) com a marca e o servidor da Hostcel.
+# Passos copiados do job build-for-macOS de flutter-build.yml, sem Developer ID e sem notarização
+# (a Apple cobra a assinatura); o app recebe assinatura ad-hoc, que o Mac exige para abrir.
+name: Deskcel macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Publicar os .dmg na versão deskcel-<versão> do GitHub"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  DESKCEL_SERVER: "desck.hostcel.com.br"
+  DESKCEL_KEY: ${{ secrets.DESKCEL_KEY }}
+  DESKCEL_NAME: "Deskcel"
+  MAC_RUST_VERSION: "1.81"
+  FLUTTER_VERSION: "3.24.5"
+  FLUTTER_MACOS_ARM_VERSION: "3.44.9"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VERSION: "1.5.3"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-macos:
+    name: macos ${{ matrix.job.arch }}
+    runs-on: ${{ matrix.job.os }}
+    needs: [generate-bridge]
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: x86_64-apple-darwin, os: macos-15-intel, extra-build-args: "", arch: x86_64, vcpkg-triplet: x64-osx }
+          - { target: aarch64-apple-darwin, os: macos-15, extra-build-args: "--screencapturekit", arch: aarch64, vcpkg-triplet: arm64-osx }
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Marca Deskcel (nome, servidor e chave)
+        run: python3 .github/deskcel-marca.py
+
+      - name: Install build runtime
+        run: |
+          brew install llvm create-dmg
+          if command -v pkg-config &>/dev/null; then
+              echo "pkg-config is already installed"
+          else
+              brew install pkg-config
+          fi
+
+      - name: Install NASM
+        run: |
+          wget https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip
+          unzip nasm-2.16.03-macosx.zip
+          sudo cp nasm-2.16.03/nasm /usr/local/bin/nasm
+          nasm --version
+
+      - name: Install flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ matrix.job.arch == 'aarch64' && env.FLUTTER_MACOS_ARM_VERSION || env.FLUTTER_VERSION }}
+
+      - name: Keep CocoaPods for Flutter 3.44 (arm64)
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Patch flutter
+        if: ${{ matrix.job.arch == 'x86_64' }}
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          if [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]]; then
+            git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          fi
+
+      - name: Workaround for flutter issue
+        shell: bash
+        run: |
+          cd "$(dirname "$(which flutter)")"
+          sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' ../packages/flutter/lib/src/scheduler/binding.dart
+          grep -n '_setFramesEnabledState(false);' ../packages/flutter/lib/src/scheduler/binding.dart
+
+      - name: Patch RustDesk sources for Flutter 3.44 (arm64)
+        if: ${{ matrix.job.arch == 'aarch64' }}
+        shell: bash
+        run: |
+          brew install gnu-sed
+          export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
+          bash .github/patches/apply_flutter_3.44_source_patches.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.MAC_RUST_VERSION }}
+          targets: ${{ matrix.job.target }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.job.arch == 'aarch64' && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}
+          path: ./
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Build deskcel
+        run: |
+          if [ "${{ matrix.job.target }}" = "aarch64-apple-darwin" ]; then
+            MIN_MACOS_VERSION="12.3"
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
+            sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
+            sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+            echo "MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}" >> "$GITHUB_ENV"
+          fi
+          ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
+
+      - name: Assinatura ad-hoc e dmg
+        run: |
+          APP=./flutter/build/macos/Build/Products/Release/Deskcel.app
+          # o service copiado depois do build invalida a assinatura do pacote; assina de novo (ad-hoc, sem Apple ID)
+          codesign --force --deep -s - --entitlements ./flutter/macos/Runner/Release.entitlements "$APP"
+          codesign --verify --deep --strict -vv "$APP"
+          "$APP/Contents/MacOS/Deskcel" --version
+          CREATE_DMG="$(readlink -f "$(command -v create-dmg)")"
+          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
+          create-dmg --volname "Deskcel" --icon "Deskcel.app" 200 190 --hide-extension "Deskcel.app" --window-size 800 400 --app-drop-link 600 185 Deskcel-${VERSION}-${{ matrix.job.arch }}.dmg "$APP"
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deskcel-macos-${{ matrix.job.arch }}
+          path: Deskcel-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg
+          if-no-files-found: error
+
+  publicar:
+    if: ${{ inputs.publicar }}
+    needs: [build-macos]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Baixar dmg
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: deskcel-macos-*
+          merge-multiple: true
+          path: pacotes
+
+      - name: Somas SHA-256 e publicação
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd pacotes
+          TAG="deskcel-${VERSION}"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "Deskcel ${VERSION}" --notes "Deskcel ${VERSION} - suporte remoto Hostcel (baseado no RustDesk, AGPL-3.0)."
+          # Cópias sem versão para links fixos (releases/latest/download/Deskcel-aarch64.dmg)
+          for f in Deskcel-${VERSION}-*; do cp "$f" "${f/-${VERSION}/}"; done
+          sha256sum Deskcel-* > SHA256SUMS-macos.txt
+          cat SHA256SUMS-macos.txt
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber Deskcel-* SHA256SUMS-macos.txt
