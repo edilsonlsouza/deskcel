@@ -1,6 +1,6 @@
 # Deskcel (Hostcel): app para macOS (Intel e Apple Silicon) com a marca e o servidor da Hostcel.
-# Passos copiados do job build-for-macOS de flutter-build.yml, sem Developer ID e sem notarização
-# (a Apple cobra a assinatura); o app recebe assinatura ad-hoc, que o Mac exige para abrir.
+# Passos copiados do job build-for-macOS de flutter-build.yml. Com os segredos MACOS_* cadastrados o app
+# sai assinado com Developer ID e notarizado pela Apple; sem eles, assinatura ad-hoc (pede "Abrir Mesmo Assim").
 name: Deskcel macOS
 
 on:
@@ -24,6 +24,7 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VERSION: "1.5.3"
+  MACOS_P12_BASE64: ${{ secrets.MACOS_P12_BASE64 }}
 
 jobs:
   generate-bridge:
@@ -51,6 +52,14 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
+
+      - name: Importar certificado Developer ID
+        if: env.MACOS_P12_BASE64 != ''
+        uses: apple-actions/import-codesign-certs@253ddeeac23f2bdad1646faac5c8c2832e800071 # v1
+        with:
+          p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
+          keychain: deskcel
 
       - name: Marca Deskcel (nome, servidor e chave)
         run: python3 .github/deskcel-marca.py
@@ -142,16 +151,38 @@ jobs:
           fi
           ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
 
-      - name: Assinatura ad-hoc e dmg
+      - name: Assinatura e dmg
+        env:
+          MACOS_P12_PASSWORD: ${{ secrets.MACOS_P12_PASSWORD }}
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          MACOS_API_KEY_P8: ${{ secrets.MACOS_API_KEY_P8 }}
+          MACOS_API_KEY_ID: ${{ secrets.MACOS_API_KEY_ID }}
+          MACOS_API_ISSUER: ${{ secrets.MACOS_API_ISSUER }}
         run: |
           APP=./flutter/build/macos/Build/Products/Release/Deskcel.app
-          # o service copiado depois do build invalida a assinatura do pacote; assina de novo (ad-hoc, sem Apple ID)
-          codesign --force --deep -s - --entitlements ./flutter/macos/Runner/Release.entitlements "$APP"
-          codesign --verify --deep --strict -vv "$APP"
+          DMG=Deskcel-${VERSION}-${{ matrix.job.arch }}.dmg
+          if [ -n "$MACOS_P12_BASE64" ]; then
+            security default-keychain -s deskcel.keychain
+            security unlock-keychain -p "$MACOS_P12_PASSWORD" deskcel.keychain
+            bash ./.github/scripts/sign-macos-app.sh "$APP" "$MACOS_CODESIGN_IDENTITY" ./flutter/macos/Runner/Release.entitlements
+          else
+            # o service copiado depois do build invalida a assinatura do pacote; assina de novo (ad-hoc, sem Apple ID)
+            codesign --force --deep -s - --entitlements ./flutter/macos/Runner/Release.entitlements "$APP"
+            codesign --verify --deep --strict -vv "$APP"
+          fi
           "$APP/Contents/MacOS/Deskcel" --version
           CREATE_DMG="$(readlink -f "$(command -v create-dmg)")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
-          create-dmg --volname "Deskcel" --icon "Deskcel.app" 200 190 --hide-extension "Deskcel.app" --window-size 800 400 --app-drop-link 600 185 Deskcel-${VERSION}-${{ matrix.job.arch }}.dmg "$APP"
+          create-dmg --volname "Deskcel" --icon "Deskcel.app" 200 190 --hide-extension "Deskcel.app" --window-size 800 400 --app-drop-link 600 185 "$DMG" "$APP"
+          if [ -n "$MACOS_P12_BASE64" ]; then
+            codesign --force --timestamp -s "$MACOS_CODESIGN_IDENTITY" "$DMG"
+            printf '%s\n' "$MACOS_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+            xcrun notarytool submit "$DMG" --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$MACOS_API_KEY_ID" --issuer "$MACOS_API_ISSUER" --wait
+            rm -f "$RUNNER_TEMP/AuthKey.p8"
+            xcrun stapler staple "$DMG"
+            xcrun stapler validate "$DMG"
+            spctl -a -t open --context context:primary-signature -vv "$DMG"
+          fi
 
       - name: Upload dmg
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
